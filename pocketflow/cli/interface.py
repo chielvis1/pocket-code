@@ -11,6 +11,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.markdown import Markdown
+
+from .agent import Agent
 
 console = Console()
 
@@ -29,6 +32,7 @@ Type /login to configure your Anthropic API key.
         self.config_file = self.config_dir / 'config.json'
         self.ensure_config_dir()
         self.load_config()
+        self.agent = None
         
     def ensure_config_dir(self):
         """Ensure configuration directory exists."""
@@ -41,6 +45,8 @@ Type /login to configure your Anthropic API key.
         try:
             with open(self.config_file) as f:
                 self.config = json.load(f)
+                if self.config.get('api_key'):
+                    self.agent = Agent(self.config['api_key'])
         except Exception:
             self.config = {'api_key': None}
             
@@ -49,6 +55,8 @@ Type /login to configure your Anthropic API key.
         with open(self.config_file, 'w') as f:
             json.dump(config, f)
         self.config = config
+        if config.get('api_key'):
+            self.agent = Agent(config['api_key'])
 
     def do_login(self, arg):
         """Configure Anthropic API key for authentication."""
@@ -71,13 +79,19 @@ Type /login to configure your Anthropic API key.
 
     def do_clear(self, arg):
         """Clear conversation history and free up context."""
-        # TODO: Implement conversation history clearing
-        console.print("[green]✓[/green] Conversation history cleared.")
+        if self.agent:
+            self.agent.clear_history()
+            console.print("[green]✓[/green] Conversation history cleared.")
+        else:
+            console.print("[yellow]![/yellow] No active conversation.")
 
     def do_compact(self, arg):
         """Clear conversation history but keep a summary in context."""
-        # TODO: Implement conversation compacting
-        console.print("[green]✓[/green] Conversation compacted with summary retained.")
+        if self.agent:
+            self.agent.compact_history()
+            console.print("[green]✓[/green] Conversation compacted with summary retained.")
+        else:
+            console.print("[yellow]![/yellow] No active conversation.")
 
     def do_config(self, arg):
         """Open config panel."""
@@ -157,7 +171,7 @@ Type /login to configure your Anthropic API key.
 
     def default(self, line):
         """Handle natural language requests."""
-        if not self.config.get('api_key'):
+        if not self.agent:
             console.print("[red]Error:[/red] Please configure your Anthropic API key first using /login")
             return
             
@@ -166,8 +180,10 @@ Type /login to configure your Anthropic API key.
             console.print("Type /help to see available commands.")
             return
             
-        # TODO: Process natural language request through Claude
-        console.print(f"Processing request: {line}")
+        # Process request through Claude
+        with console.status("[bold blue]Thinking...[/bold blue]"):
+            response = self.agent.process_request(line)
+            console.print(Markdown(response))
 
 def main():
     """Main entry point for the CLI."""
