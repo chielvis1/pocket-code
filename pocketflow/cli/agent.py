@@ -34,17 +34,15 @@ Please format your responses in markdown and be concise unless asked for details
     def process_request(self, request: str) -> str:
         """Process a user request through Claude."""
         try:
-            # Create message with conversation history
-            messages = [
-                {
-                    "role": "system",
-                    "content": self.system_prompt
-                }
-            ]
+            # Create messages without system prompt
+            messages = []
             
             # Add conversation history
             for msg in self.conversation_history[-5:]:  # Keep last 5 messages for context
-                messages.append(msg)
+                messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
             
             # Add user's request
             messages.append({
@@ -52,11 +50,12 @@ Please format your responses in markdown and be concise unless asked for details
                 "content": request
             })
             
-            # Get response from Claude
+            # Get response from Claude with system prompt as parameter
             response = self.client.messages.create(
                 model="claude-3-sonnet-20240229",
                 max_tokens=4096,
                 messages=messages,
+                system=self.system_prompt,
                 temperature=0.7
             )
             
@@ -87,16 +86,16 @@ Please format your responses in markdown and be concise unless asked for details
             
         # Summarize old messages
         old_messages = self.conversation_history[:-6]  # All except last 6
-        summary_request = "Please summarize our conversation so far very concisely."
         
         try:
             summary = self.client.messages.create(
                 model="claude-3-sonnet-20240229",
                 max_tokens=1024,
-                messages=[
-                    {"role": "system", "content": "Please summarize the following conversation very concisely."},
-                    *old_messages
-                ],
+                messages=[{
+                    "role": msg["role"],
+                    "content": msg["content"]
+                } for msg in old_messages],
+                system="Please summarize the following conversation very concisely.",
                 temperature=0.7
             )
             
