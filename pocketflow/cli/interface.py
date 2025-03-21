@@ -2,11 +2,10 @@
 
 import cmd
 import sys
-import webbrowser
-from pathlib import Path
-from typing import Optional
 import json
 import os
+from pathlib import Path
+from typing import Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -20,7 +19,7 @@ class AgentCLI(cmd.Cmd):
     
     intro = """Welcome to PocketCode - Your AI Coding Assistant
 Type /help or ? to list commands.
-Type /login to configure your Vertex AI credentials.
+Type /login to configure your Anthropic API key.
 """
     prompt = '> '
     
@@ -35,11 +34,7 @@ Type /login to configure your Vertex AI credentials.
         """Ensure configuration directory exists."""
         self.config_dir.mkdir(exist_ok=True)
         if not self.config_file.exists():
-            self.save_config({
-                'project_id': None,
-                'location': None,
-                'credentials_path': None
-            })
+            self.save_config({'api_key': None})
             
     def load_config(self):
         """Load configuration from file."""
@@ -47,11 +42,7 @@ Type /login to configure your Vertex AI credentials.
             with open(self.config_file) as f:
                 self.config = json.load(f)
         except Exception:
-            self.config = {
-                'project_id': None,
-                'location': None,
-                'credentials_path': None
-            }
+            self.config = {'api_key': None}
             
     def save_config(self, config):
         """Save configuration to file."""
@@ -60,30 +51,23 @@ Type /login to configure your Vertex AI credentials.
         self.config = config
 
     def do_login(self, arg):
-        """Configure Vertex AI credentials for authentication."""
-        console.print("\n[bold blue]Vertex AI Configuration[/bold blue]")
-        console.print("\nPlease provide your Google Cloud credentials:")
+        """Configure Anthropic API key for authentication."""
+        console.print("\n[bold blue]Anthropic API Configuration[/bold blue]")
+        console.print("\nPlease visit https://console.anthropic.com/settings/keys to get your API key.")
         
-        project_id = console.input("\nEnter your Google Cloud Project ID: ").strip()
-        location = console.input("Enter your location (e.g., us-central1): ").strip()
-        credentials_path = console.input("Enter the path to your service account key JSON file: ").strip()
-        
-        if project_id and location and credentials_path:
-            if not os.path.exists(credentials_path):
-                console.print("[red]✗[/red] Credentials file not found!")
+        api_key = console.input("\nEnter your Anthropic API key (input will be hidden): ", password=True)
+        if api_key.strip():
+            if not api_key.startswith('sk-'):
+                console.print("[red]✗[/red] Invalid API key format. It should start with 'sk-'")
                 return
                 
-            self.save_config({
-                'project_id': project_id,
-                'location': location,
-                'credentials_path': credentials_path
-            })
-            console.print("[green]✓[/green] Vertex AI credentials saved successfully!")
+            self.save_config({'api_key': api_key.strip()})
+            console.print("[green]✓[/green] API key saved successfully!")
             
             # Set environment variable for credentials
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+            os.environ['ANTHROPIC_API_KEY'] = api_key.strip()
         else:
-            console.print("[red]✗[/red] All fields are required.")
+            console.print("[red]✗[/red] No API key provided.")
 
     def do_clear(self, arg):
         """Clear conversation history and free up context."""
@@ -101,9 +85,12 @@ Type /login to configure your Vertex AI credentials.
         table.add_column("Setting", style="cyan")
         table.add_column("Value", style="green")
         
-        table.add_row("Project ID", self.config.get('project_id') or "Not configured")
-        table.add_row("Location", self.config.get('location') or "Not configured")
-        table.add_row("Credentials", self.config.get('credentials_path') or "Not configured")
+        # Mask API key
+        api_key = self.config.get('api_key')
+        masked_key = f"{api_key[:8]}...{api_key[-4:]}" if api_key else "Not configured"
+        
+        table.add_row("API Key", masked_key)
+        table.add_row("Model", "Claude 3.7 Sonnet")
         table.add_row("Working Directory", os.getcwd())
         
         console.print(table)
@@ -121,13 +108,9 @@ Type /login to configure your Vertex AI credentials.
         table.add_column("Component", style="cyan")
         table.add_column("Status", style="green")
         
-        # Check Vertex AI credentials
-        creds_status = "[green]✓[/green]" if all([
-            self.config.get('project_id'),
-            self.config.get('location'),
-            self.config.get('credentials_path')
-        ]) else "[red]✗[/red]"
-        table.add_row("Vertex AI Credentials", creds_status)
+        # Check API key
+        api_status = "[green]✓[/green]" if self.config.get('api_key') else "[red]✗[/red]"
+        table.add_row("Anthropic API Key", api_status)
         
         # Check Python version
         import platform
@@ -146,7 +129,7 @@ Type /login to configure your Vertex AI credentials.
         """Show help and available commands."""
         help_text = {
             "Basic Commands": {
-                "/login": "Configure your Vertex AI credentials",
+                "/login": "Configure your Anthropic API key",
                 "/help": "Show this help message",
                 "/exit": "Exit the program",
             },
@@ -174,12 +157,8 @@ Type /login to configure your Vertex AI credentials.
 
     def default(self, line):
         """Handle natural language requests."""
-        if not all([
-            self.config.get('project_id'),
-            self.config.get('location'),
-            self.config.get('credentials_path')
-        ]):
-            console.print("[red]Error:[/red] Please configure your Vertex AI credentials first using /login")
+        if not self.config.get('api_key'):
+            console.print("[red]Error:[/red] Please configure your Anthropic API key first using /login")
             return
             
         if line.startswith('/'):
@@ -187,7 +166,7 @@ Type /login to configure your Vertex AI credentials.
             console.print("Type /help to see available commands.")
             return
             
-        # TODO: Process natural language request through the Vertex AI agent
+        # TODO: Process natural language request through Claude
         console.print(f"Processing request: {line}")
 
 def main():
