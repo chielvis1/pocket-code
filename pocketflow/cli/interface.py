@@ -20,7 +20,7 @@ class AgentCLI(cmd.Cmd):
     
     intro = """Welcome to PocketCode - Your AI Coding Assistant
 Type /help or ? to list commands.
-Type /login to configure your API key.
+Type /login to configure your Vertex AI credentials.
 """
     prompt = '> '
     
@@ -35,7 +35,11 @@ Type /login to configure your API key.
         """Ensure configuration directory exists."""
         self.config_dir.mkdir(exist_ok=True)
         if not self.config_file.exists():
-            self.save_config({'api_key': None})
+            self.save_config({
+                'project_id': None,
+                'location': None,
+                'credentials_path': None
+            })
             
     def load_config(self):
         """Load configuration from file."""
@@ -43,7 +47,11 @@ Type /login to configure your API key.
             with open(self.config_file) as f:
                 self.config = json.load(f)
         except Exception:
-            self.config = {'api_key': None}
+            self.config = {
+                'project_id': None,
+                'location': None,
+                'credentials_path': None
+            }
             
     def save_config(self, config):
         """Save configuration to file."""
@@ -52,17 +60,30 @@ Type /login to configure your API key.
         self.config = config
 
     def do_login(self, arg):
-        """Configure API key for authentication."""
-        console.print("\n[bold blue]API Key Configuration[/bold blue]")
-        console.print("Opening browser to get your API key...")
-        webbrowser.open('https://platform.openai.com/api-keys')
+        """Configure Vertex AI credentials for authentication."""
+        console.print("\n[bold blue]Vertex AI Configuration[/bold blue]")
+        console.print("\nPlease provide your Google Cloud credentials:")
         
-        api_key = console.input("\nPaste your API key here (input will be hidden): ", password=True)
-        if api_key.strip():
-            self.save_config({'api_key': api_key.strip()})
-            console.print("[green]✓[/green] API key saved successfully!")
+        project_id = console.input("\nEnter your Google Cloud Project ID: ").strip()
+        location = console.input("Enter your location (e.g., us-central1): ").strip()
+        credentials_path = console.input("Enter the path to your service account key JSON file: ").strip()
+        
+        if project_id and location and credentials_path:
+            if not os.path.exists(credentials_path):
+                console.print("[red]✗[/red] Credentials file not found!")
+                return
+                
+            self.save_config({
+                'project_id': project_id,
+                'location': location,
+                'credentials_path': credentials_path
+            })
+            console.print("[green]✓[/green] Vertex AI credentials saved successfully!")
+            
+            # Set environment variable for credentials
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
         else:
-            console.print("[red]✗[/red] No API key provided.")
+            console.print("[red]✗[/red] All fields are required.")
 
     def do_clear(self, arg):
         """Clear conversation history and free up context."""
@@ -80,11 +101,9 @@ Type /login to configure your API key.
         table.add_column("Setting", style="cyan")
         table.add_column("Value", style="green")
         
-        # Mask API key
-        api_key = self.config.get('api_key')
-        masked_key = f"{api_key[:8]}...{api_key[-4:]}" if api_key else "Not configured"
-        
-        table.add_row("API Key", masked_key)
+        table.add_row("Project ID", self.config.get('project_id') or "Not configured")
+        table.add_row("Location", self.config.get('location') or "Not configured")
+        table.add_row("Credentials", self.config.get('credentials_path') or "Not configured")
         table.add_row("Working Directory", os.getcwd())
         
         console.print(table)
@@ -102,9 +121,13 @@ Type /login to configure your API key.
         table.add_column("Component", style="cyan")
         table.add_column("Status", style="green")
         
-        # Check API key
-        api_status = "[green]✓[/green]" if self.config.get('api_key') else "[red]✗[/red]"
-        table.add_row("API Key", api_status)
+        # Check Vertex AI credentials
+        creds_status = "[green]✓[/green]" if all([
+            self.config.get('project_id'),
+            self.config.get('location'),
+            self.config.get('credentials_path')
+        ]) else "[red]✗[/red]"
+        table.add_row("Vertex AI Credentials", creds_status)
         
         # Check Python version
         import platform
@@ -123,7 +146,7 @@ Type /login to configure your API key.
         """Show help and available commands."""
         help_text = {
             "Basic Commands": {
-                "/login": "Configure your API key",
+                "/login": "Configure your Vertex AI credentials",
                 "/help": "Show this help message",
                 "/exit": "Exit the program",
             },
@@ -151,8 +174,12 @@ Type /login to configure your API key.
 
     def default(self, line):
         """Handle natural language requests."""
-        if not self.config.get('api_key'):
-            console.print("[red]Error:[/red] Please configure your API key first using /login")
+        if not all([
+            self.config.get('project_id'),
+            self.config.get('location'),
+            self.config.get('credentials_path')
+        ]):
+            console.print("[red]Error:[/red] Please configure your Vertex AI credentials first using /login")
             return
             
         if line.startswith('/'):
@@ -160,7 +187,7 @@ Type /login to configure your API key.
             console.print("Type /help to see available commands.")
             return
             
-        # TODO: Process natural language request through the agent
+        # TODO: Process natural language request through the Vertex AI agent
         console.print(f"Processing request: {line}")
 
 def main():

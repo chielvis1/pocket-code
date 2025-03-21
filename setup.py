@@ -6,7 +6,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "rich>=10.0.0",
-        "openai>=1.0.0",
+        "google-cloud-aiplatform>=1.38.0",
         "prompt-toolkit>=3.0.0",
         "typer>=0.9.0",
     ],
