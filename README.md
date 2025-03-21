@@ -136,10 +136,53 @@ agent.process_request("initialize a new React project and set up ESLint")
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ai-coding-agent.git
+git clone https://github.com/chielvis1/pocket-code.git
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Install the CLI tool
+pip install -e .
+```
+
+### Usage
+
+1. Open your terminal and start the interactive interface:
+```bash
+pcode
+```
+
+2. First-time setup:
+```bash
+# Configure your API key
+/login    # This will open your browser for API key configuration
+
+# View available commands
+/help     # Shows all available commands and their descriptions
+```
+
+3. Common Commands:
+```bash
+/clear          # Clear conversation history and free up context
+/compact        # Clear conversation history but keep a summary
+/config         # Open configuration panel
+/cost           # Show total cost and duration of current session
+/doctor         # Check health of your installation
+/exit (quit)    # Exit the REPL
+/help           # Show help and available commands
+/init           # Initialize a new documentation file
+```
+
+4. Example Interactions:
+```bash
+> analyze the current directory structure
+Analyzing... Found 5 Python files, 2 JavaScript files...
+
+> create a new API endpoint for user authentication
+Creating endpoint... Generated code in auth/views.py...
+
+> run tests for the user module
+Running pytest for user module...
 ```
 
 ### Basic Usage
@@ -195,8 +238,14 @@ Contributions are welcome! Please check our [Contributing Guide](CONTRIBUTING.md
 
 ## Credits
 
-Built with:
-- [PocketFlow](https://github.com/The-Pocket/PocketFlow) - The underlying framework
+### Authors
+- **Elvis Chi** - *Creator and Lead Developer*
+  - Designed and implemented the AI coding agent architecture
+  - Created the interactive CLI interface
+  - Integrated with PocketFlow framework
+
+### Built With
+- [PocketFlow](https://github.com/The-Pocket/PocketFlow) - The powerful framework that made this agent possible
 - Python 3.8+
 - Modern AI/ML libraries
 
