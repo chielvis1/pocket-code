@@ -7,7 +7,6 @@ setup(
     install_requires=[
         "rich>=10.0.0",
         "openai>=1.0.0",
-        "pocketflow>=0.1.0",
         "prompt-toolkit>=3.0.0",
         "typer>=0.9.0",
     ],
