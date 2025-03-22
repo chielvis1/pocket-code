@@ -2,12 +2,14 @@
 
 import os
 import json
+import subprocess
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 
 from anthropic import Anthropic
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.syntax import Syntax
 
 console = Console()
 
@@ -28,8 +30,50 @@ Your capabilities include:
 4. Providing code suggestions and explanations
 5. Debugging and troubleshooting
 
+IMPORTANT: When a user asks you to perform a task:
+1. DO NOT just suggest commands - actually execute them using the execute_command() function
+2. DO NOT explain how to do it - just do it
+3. Return the results directly
+4. Only provide explanations if there's an error or if explicitly asked
+
+Example:
+User: "List my current directory"
+You should: Call execute_command("ls -la") and return the results
+NOT: Explain how to use the ls command
+
 Please format your responses in markdown and be concise unless asked for details.
 """
+    
+    def execute_command(self, command: str) -> Tuple[str, int]:
+        """Execute a shell command and return output and status."""
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=os.getcwd()
+            )
+            return result.stdout + result.stderr, result.returncode
+        except Exception as e:
+            return str(e), 1
+    
+    def read_file(self, path: str) -> str:
+        """Read contents of a file."""
+        try:
+            with open(path, 'r') as f:
+                return f.read()
+        except Exception as e:
+            return f"Error reading file: {str(e)}"
+    
+    def write_file(self, path: str, content: str) -> str:
+        """Write content to a file."""
+        try:
+            with open(path, 'w') as f:
+                f.write(content)
+            return f"Successfully wrote to {path}"
+        except Exception as e:
+            return f"Error writing file: {str(e)}"
     
     def process_request(self, request: str) -> str:
         """Process a user request through Claude."""
@@ -44,10 +88,20 @@ Please format your responses in markdown and be concise unless asked for details
                     "content": msg["content"]
                 })
             
-            # Add user's request
+            # Add available functions to the request
+            function_context = """
+Available functions:
+- execute_command(command: str) -> Tuple[str, int]: Execute a shell command
+- read_file(path: str) -> str: Read contents of a file
+- write_file(path: str, content: str) -> str: Write content to a file
+
+Current working directory: {cwd}
+""".format(cwd=os.getcwd())
+            
+            # Add user's request with function context
             messages.append({
                 "role": "user",
-                "content": request
+                "content": function_context + "\n" + request
             })
             
             # Get response from Claude with system prompt as parameter
@@ -62,7 +116,7 @@ Please format your responses in markdown and be concise unless asked for details
             # Store in conversation history
             self.conversation_history.append({
                 "role": "user",
-                "content": request
+                "content": request  # Store original request without function context
             })
             self.conversation_history.append({
                 "role": "assistant",
