@@ -4,7 +4,8 @@ import os
 import json
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Union
+import shlex
 
 from anthropic import Anthropic
 from rich.console import Console
@@ -16,10 +17,11 @@ console = Console()
 class Agent:
     """AI Agent powered by Claude 3.7 Sonnet."""
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, simulation_mode: bool = False):
         """Initialize the agent with API key."""
         self.client = Anthropic(api_key=api_key)
         self.conversation_history: List[Dict] = []
+        self.simulation_mode = simulation_mode
         self.system_prompt = """You are a powerful agentic AI coding assistant, powered by Claude 3.7 Sonnet.
 You operate in a command-line interface to help users with coding tasks.
 
@@ -44,17 +46,31 @@ NOT: Explain how to use the ls command
 Please format your responses in markdown and be concise unless asked for details.
 """
     
-    def execute_command(self, command: str) -> Tuple[str, int]:
+    def execute_command(self, command: str) -> Union[Tuple[str, int], None]:
         """Execute a shell command and return output and status."""
         try:
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                cwd=os.getcwd()
-            )
-            return result.stdout + result.stderr, result.returncode
+            if self.simulation_mode:
+                # In simulation mode, show the command that would be executed
+                result = subprocess.run(
+                    command,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    cwd=os.getcwd()
+                )
+                return result.stdout + result.stderr, result.returncode
+            else:
+                # In direct mode, execute in the user's terminal
+                # Split command for proper argument handling
+                args = shlex.split(command)
+                
+                # Execute command directly in the user's terminal
+                # This will use the user's actual shell environment
+                os.execvp(args[0], args)
+                
+                # execvp replaces the current process, so we won't reach here
+                return None
+                
         except Exception as e:
             return str(e), 1
     
@@ -96,7 +112,8 @@ Available functions:
 - write_file(path: str, content: str) -> str: Write content to a file
 
 Current working directory: {cwd}
-""".format(cwd=os.getcwd())
+Running in {mode} mode
+""".format(cwd=os.getcwd(), mode="simulation" if self.simulation_mode else "direct")
             
             # Add user's request with function context
             messages.append({
