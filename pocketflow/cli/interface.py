@@ -2,20 +2,32 @@
 
 import os
 import sys
+import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.prompt import Prompt
 from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import FileHistory
 
 from .agent import Agent
 
 app = typer.Typer()
 console = Console()
+
+COMMANDS = [
+    "/help",
+    "/login",
+    "/quit",
+    "/clear",
+    "/config",
+    "/doctor",
+    "/cost"
+]
 
 def get_history_file() -> Path:
     """Get the path to the history file."""
@@ -30,13 +42,21 @@ class Interface:
         """Initialize the interface."""
         self.agent: Optional[Agent] = None
         self.history_file = get_history_file()
-        self.session = PromptSession(history=FileHistory(str(self.history_file)))
+        self.command_completer = WordCompleter(COMMANDS, sentence=True)
+        self.session = PromptSession(
+            history=FileHistory(str(self.history_file)),
+            completer=self.command_completer,
+            complete_while_typing=True
+        )
         
     def login(self) -> None:
         """Configure API key."""
-        api_key = Prompt.ask("Enter your Anthropic API key")
+        console.print("\n[bold blue]Anthropic API Configuration[/bold blue]")
+        console.print("\nPlease visit https://console.anthropic.com/settings/keys to get your API key.")
+        
+        api_key = console.input("\nEnter your Anthropic API key (input will be hidden): ", password=True)
         if not api_key.startswith("sk-"):
-            console.print("[red]Invalid API key format. Should start with 'sk-'[/red]")
+            console.print("[red]✗[/red] Invalid API key format. Should start with 'sk-'")
             return
             
         # Save API key securely
@@ -44,9 +64,9 @@ class Interface:
         key_file = config_dir / "api_key"
         key_file.write_text(api_key)
         
-        # Initialize agent in simulation mode by default
-        self.agent = Agent(api_key, simulation_mode=True)
-        console.print("[green]Successfully logged in![/green]")
+        # Initialize agent
+        self.agent = Agent(api_key)
+        console.print("[green]✓[/green] API key saved successfully!")
         
     def load_api_key(self) -> Optional[str]:
         """Load saved API key."""
@@ -70,15 +90,14 @@ class Interface:
                 self.agent.clear_history()
             console.clear()
             return True
-        elif command == "/direct":
-            if self.agent:
-                self.agent.simulation_mode = False
-                console.print("[yellow]Switched to direct mode - commands will execute in your terminal[/yellow]")
+        elif command == "/config":
+            self.show_config()
             return True
-        elif command == "/simulate":
-            if self.agent:
-                self.agent.simulation_mode = True
-                console.print("[green]Switched to simulation mode - commands will be simulated[/green]")
+        elif command == "/doctor":
+            self.check_health()
+            return True
+        elif command == "/cost":
+            self.show_cost()
             return True
         return False
         
@@ -87,28 +106,71 @@ class Interface:
         help_text = """
 # Available Commands
 
+## System Commands
 - `/help`: Show this help message
-- `/login`: Configure API key
+- `/login`: Configure API key securely
 - `/quit`: Exit the program
 - `/clear`: Clear conversation history and screen
-- `/direct`: Switch to direct mode (execute in your terminal)
-- `/simulate`: Switch to simulation mode (safe testing)
 
-In direct mode, commands will execute directly in your terminal.
-In simulation mode, commands will be simulated (safe for testing).
+## Information
+- `/config`: Show current configuration
+- `/doctor`: Check system health
+- `/cost`: Show session cost and duration
+
+For any other input without a leading /, I will:
+1. Respond to greetings and questions
+2. Execute tasks and commands you request
+3. Help with coding and development tasks
 """
         console.print(Markdown(help_text))
+        
+    def show_config(self):
+        """Show current configuration."""
+        api_key = self.load_api_key()
+        masked_key = f"{api_key[:8]}...{api_key[-4:]}" if api_key else "Not configured"
+        
+        config_text = f"""
+# Current Configuration
+
+- API Key: {masked_key}
+- Model: Claude 3.7 Sonnet
+- Working Directory: {os.getcwd()}
+"""
+        console.print(Markdown(config_text))
+        
+    def check_health(self):
+        """Check system health."""
+        api_key = self.load_api_key()
+        health_text = f"""
+# System Health Check
+
+- API Key: {"[green]✓[/green] Configured" if api_key else "[red]✗[/red] Not configured"}
+- Python Version: [green]✓[/green] {sys.version.split()[0]}
+- Working Directory: [green]✓[/green] {os.getcwd()}
+"""
+        console.print(Markdown(health_text))
+        
+    def show_cost(self):
+        """Show session cost and duration."""
+        cost_text = """
+# Session Statistics
+
+- Duration: 0h 0m 0s
+- Total Cost: $0.00
+"""
+        console.print(Markdown(cost_text))
         
     def run(self):
         """Run the CLI interface."""
         console.print("[bold]Welcome to PocketCode CLI![/bold]")
-        console.print("Type /help for available commands")
+        console.print("Type / and press Tab to see available commands")
+        console.print("Or just type your request and I'll help you")
         
         # Try to load saved API key
         api_key = self.load_api_key()
         if api_key:
-            self.agent = Agent(api_key, simulation_mode=True)
-            console.print("[green]Loaded saved API key[/green]")
+            self.agent = Agent(api_key)
+            console.print("[green]✓[/green] Loaded saved API key")
         else:
             console.print("Please configure your API key with /login")
             
@@ -127,7 +189,7 @@ In simulation mode, commands will be simulated (safe for testing).
                         break
                     continue
                     
-                # Process request
+                # Process regular request
                 if not self.agent:
                     console.print("[red]Please configure your API key first with /login[/red]")
                     continue

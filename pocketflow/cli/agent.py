@@ -4,8 +4,7 @@ import os
 import json
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple, Union
-import shlex
+from typing import List, Optional, Dict, Tuple
 
 from anthropic import Anthropic
 from rich.console import Console
@@ -17,11 +16,10 @@ console = Console()
 class Agent:
     """AI Agent powered by Claude 3.7 Sonnet."""
     
-    def __init__(self, api_key: str, simulation_mode: bool = False):
+    def __init__(self, api_key: str):
         """Initialize the agent with API key."""
         self.client = Anthropic(api_key=api_key)
         self.conversation_history: List[Dict] = []
-        self.simulation_mode = simulation_mode
         self.system_prompt = """You are a powerful agentic AI coding assistant, powered by Claude 3.7 Sonnet.
 You operate in a command-line interface to help users with coding tasks.
 
@@ -32,45 +30,38 @@ Your capabilities include:
 4. Providing code suggestions and explanations
 5. Debugging and troubleshooting
 
-IMPORTANT: When a user asks you to perform a task:
-1. DO NOT just suggest commands - actually execute them using the execute_command() function
-2. DO NOT explain how to do it - just do it
-3. Return the results directly
-4. Only provide explanations if there's an error or if explicitly asked
+IMPORTANT: When processing user input:
+1. For greetings or general questions: Respond naturally and ask how you can help
+2. For task requests: Execute them using the available functions
+3. For coding tasks: Provide guidance and execute necessary commands
+4. Format all responses in markdown
+5. Be concise unless details are requested
 
-Example:
-User: "List my current directory"
-You should: Call execute_command("ls -la") and return the results
-NOT: Explain how to use the ls command
+Example interactions:
+User: "hello"
+You: "Hello! How can I help you with your coding tasks today?"
+
+User: "list files in current directory"
+You: Execute command and show results:
+```
+$ ls -la
+[command output]
+```
 
 Please format your responses in markdown and be concise unless asked for details.
 """
     
-    def execute_command(self, command: str) -> Union[Tuple[str, int], None]:
+    def execute_command(self, command: str) -> Tuple[str, int]:
         """Execute a shell command and return output and status."""
         try:
-            if self.simulation_mode:
-                # In simulation mode, show the command that would be executed
-                result = subprocess.run(
-                    command,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    cwd=os.getcwd()
-                )
-                return result.stdout + result.stderr, result.returncode
-            else:
-                # In direct mode, execute in the user's terminal
-                # Split command for proper argument handling
-                args = shlex.split(command)
-                
-                # Execute command directly in the user's terminal
-                # This will use the user's actual shell environment
-                os.execvp(args[0], args)
-                
-                # execvp replaces the current process, so we won't reach here
-                return None
-                
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=os.getcwd()
+            )
+            return result.stdout + result.stderr, result.returncode
         except Exception as e:
             return str(e), 1
     
@@ -112,8 +103,7 @@ Available functions:
 - write_file(path: str, content: str) -> str: Write content to a file
 
 Current working directory: {cwd}
-Running in {mode} mode
-""".format(cwd=os.getcwd(), mode="simulation" if self.simulation_mode else "direct")
+""".format(cwd=os.getcwd())
             
             # Add user's request with function context
             messages.append({
