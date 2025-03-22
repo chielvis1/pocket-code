@@ -34,21 +34,27 @@ Your capabilities include:
 
 IMPORTANT: When processing user input:
 1. For greetings or general questions: Respond naturally and ask how you can help
-2. For task requests: Execute them directly using the provided functions
-3. For coding tasks: Provide guidance and execute necessary commands
+2. For task requests: Execute them directly using the provided functions - DO NOT just provide instructions
+3. For coding tasks: Execute the necessary commands to complete the task - DO NOT just suggest commands
 4. Format all responses in markdown
 5. Be concise unless details are requested
 6. NEVER simulate or make up command outputs - always use the actual output from execute_command()
-7. When executing commands, ALWAYS use the execute_command() function - do not just suggest commands
+7. When executing commands, ALWAYS use the execute_command() function
+8. For complex tasks, break them down into steps and execute each step
+9. After executing commands, verify the results and proceed with next steps
 
 Example interactions:
 User: "hello"
 You: "Hello! How can I help you with your coding tasks today?"
 
-User: "list files in current directory"
-You: Let me list the files for you:
+User: "create a new react app"
+You: I'll create a new React app for you:
 ```shell
-output = execute_command("ls -la")
+output = execute_command("npx create-react-app my-app")
+```
+React app created successfully! Let's start it:
+```shell
+output = execute_command("cd my-app && npm start")
 ```
 
 Please format your responses in markdown and be concise unless asked for details.
@@ -151,6 +157,8 @@ IMPORTANT: When executing commands:
 3. Always show the actual command being run
 4. Format command output in a code block with the command at the top
 5. ALWAYS execute commands - do not just suggest them
+6. For complex tasks, execute each step and verify the results
+7. If a command fails, try to fix the issue or ask for help
 """.format(
     cwd=os.getcwd(),
     sudo="available" if check_sudo_access() else "not configured"
@@ -176,19 +184,29 @@ IMPORTANT: When executing commands:
             
             # Check if the response contains a command to execute
             if "execute_command(" in response_text:
-                # Extract the command from the response
-                start = response_text.find('execute_command("') + len('execute_command("')
-                end = response_text.find('")', start)
-                if start > -1 and end > -1:
-                    command = response_text[start:end]
-                    # Execute the command and get actual output
+                # Extract all commands from the response
+                commands = []
+                pos = 0
+                while True:
+                    start = response_text.find('execute_command("', pos)
+                    if start == -1:
+                        break
+                    start += len('execute_command("')
+                    end = response_text.find('")', start)
+                    if end == -1:
+                        break
+                    commands.append(response_text[start:end])
+                    pos = end + 2
+                
+                # Execute each command and update the response
+                for command in commands:
                     output, status = self.execute_command(command)
-                    # Format the response with actual command output
-                    response_text = f"```shell\n$ {command}\n{output}\n```"
-                    
-                    # If command failed, add error message
+                    # Replace the command in the response with actual output
+                    placeholder = f'execute_command("{command}")'
+                    replacement = f"```shell\n$ {command}\n{output}\n```"
                     if status != 0:
-                        response_text += f"\nCommand failed with exit code {status}"
+                        replacement += f"\nCommand failed with exit code {status}"
+                    response_text = response_text.replace(placeholder, replacement)
             else:
                 # If no command was executed but one was needed, execute it
                 if any(keyword in request.lower() for keyword in ["list", "show", "display", "find", "search"]):
