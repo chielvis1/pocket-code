@@ -39,6 +39,7 @@ IMPORTANT: When processing user input:
 4. Format all responses in markdown
 5. Be concise unless details are requested
 6. NEVER simulate or make up command outputs - always use the actual output from execute_command()
+7. When executing commands, ALWAYS use the execute_command() function - do not just suggest commands
 
 Example interactions:
 User: "hello"
@@ -46,9 +47,8 @@ You: "Hello! How can I help you with your coding tasks today?"
 
 User: "list files in current directory"
 You: Let me list the files for you:
-```
-$ ls -la
-[actual command output will be shown here]
+```shell
+output = execute_command("ls -la")
 ```
 
 Please format your responses in markdown and be concise unless asked for details.
@@ -150,6 +150,7 @@ IMPORTANT: When executing commands:
 2. NEVER simulate or make up command outputs
 3. Always show the actual command being run
 4. Format command output in a code block with the command at the top
+5. ALWAYS execute commands - do not just suggest them
 """.format(
     cwd=os.getcwd(),
     sudo="available" if check_sudo_access() else "not configured"
@@ -183,7 +184,26 @@ IMPORTANT: When executing commands:
                     # Execute the command and get actual output
                     output, status = self.execute_command(command)
                     # Format the response with actual command output
-                    response_text = f"```\n$ {command}\n{output}\n```"
+                    response_text = f"```shell\n$ {command}\n{output}\n```"
+                    
+                    # If command failed, add error message
+                    if status != 0:
+                        response_text += f"\nCommand failed with exit code {status}"
+            else:
+                # If no command was executed but one was needed, execute it
+                if any(keyword in request.lower() for keyword in ["list", "show", "display", "find", "search"]):
+                    # Determine the appropriate command based on the request
+                    command = None
+                    if "tree" in request.lower():
+                        command = "tree"
+                    elif "list" in request.lower() or "show" in request.lower():
+                        command = "ls -la"
+                    
+                    if command:
+                        output, status = self.execute_command(command)
+                        response_text = f"```shell\n$ {command}\n{output}\n```"
+                        if status != 0:
+                            response_text += f"\nCommand failed with exit code {status}"
             
             # Store in conversation history
             self.conversation_history.append({
