@@ -67,27 +67,15 @@ class Interface:
         
         # Initialize agent
         self.agent = Agent(api_key)
-        console.print("[green]✓[/green] API key saved successfully!")
-        
-        # Show welcome message after successful login
-        self.show_welcome_message()
+        console.print("[green]✓[/green] Login successful! You may begin prompting.")
         
     def show_welcome_message(self):
         """Show welcome message after login."""
         welcome_text = """
 # 🚀 Welcome to Pocket Code!
 
-I'm Claude, your AI coding assistant. I can help you with:
-- Writing and modifying code
-- Executing shell commands
-- Managing files and directories
-- Debugging and troubleshooting
-- And much more!
-
 Type `/help` to see available commands
 Or just tell me what you need help with!
-
-[dim]Note: Some operations may require directory or sudo access. I'll ask for permission when needed.[/dim]
 """
         console.print(Markdown(welcome_text))
         
@@ -198,8 +186,7 @@ For any other input without a leading /, I will:
         if api_key:
             self.agent = Agent(api_key)
             console.print("[green]✓[/green] Loaded saved API key")
-            self.show_welcome_message()
-        
+            
         while True:
             try:
                 # Get user input
@@ -220,8 +207,8 @@ For any other input without a leading /, I will:
                     console.print("[red]Please configure your API key first with /login[/red]")
                     continue
                     
-                # Show thinking indicator
-                with console.status("Thinking...", spinner="dots"):
+                # Show thinking indicator and process request
+                with console.status("[bold yellow]Thinking...[/bold yellow]", spinner="dots"):
                     response = self.agent.process_request(user_input)
                     
                 # Print response
