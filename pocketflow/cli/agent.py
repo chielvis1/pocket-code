@@ -11,6 +11,8 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.syntax import Syntax
 
+from .permissions import check_directory_access, request_directory_access, check_sudo_access, request_sudo_access
+
 console = Console()
 
 class Agent:
@@ -54,12 +56,28 @@ Please format your responses in markdown and be concise unless asked for details
     def execute_command(self, command: str) -> Tuple[str, int]:
         """Execute a shell command and return output and status."""
         try:
+            # Check if command needs sudo
+            needs_sudo = command.startswith("sudo ")
+            if needs_sudo and not check_sudo_access():
+                if request_sudo_access():
+                    console.print("[yellow]Please run the command again after configuring sudo access[/yellow]")
+                    return "Operation requires sudo access. Please try again after configuring sudo.", 1
+                return "Operation cancelled - sudo access required.", 1
+            
+            # Check directory access
+            cwd = os.getcwd()
+            if not check_directory_access(cwd):
+                if request_directory_access(cwd):
+                    # User granted access, try again
+                    return self.execute_command(command)
+                return f"Operation cancelled - no access to directory: {cwd}", 1
+            
             result = subprocess.run(
                 command,
                 shell=True,
                 capture_output=True,
                 text=True,
-                cwd=os.getcwd()
+                cwd=cwd
             )
             return result.stdout + result.stderr, result.returncode
         except Exception as e:
@@ -68,6 +86,14 @@ Please format your responses in markdown and be concise unless asked for details
     def read_file(self, path: str) -> str:
         """Read contents of a file."""
         try:
+            # Check directory access
+            dir_path = str(Path(path).parent)
+            if not check_directory_access(dir_path):
+                if request_directory_access(dir_path):
+                    # User granted access, try again
+                    return self.read_file(path)
+                return f"Operation cancelled - no access to directory: {dir_path}"
+            
             with open(path, 'r') as f:
                 return f.read()
         except Exception as e:
@@ -76,6 +102,14 @@ Please format your responses in markdown and be concise unless asked for details
     def write_file(self, path: str, content: str) -> str:
         """Write content to a file."""
         try:
+            # Check directory access
+            dir_path = str(Path(path).parent)
+            if not check_directory_access(dir_path):
+                if request_directory_access(dir_path):
+                    # User granted access, try again
+                    return self.write_file(path, content)
+                return f"Operation cancelled - no access to directory: {dir_path}"
+            
             with open(path, 'w') as f:
                 f.write(content)
             return f"Successfully wrote to {path}"
@@ -103,7 +137,11 @@ Available functions:
 - write_file(path: str, content: str) -> str: Write content to a file
 
 Current working directory: {cwd}
-""".format(cwd=os.getcwd())
+Sudo access: {sudo}
+""".format(
+    cwd=os.getcwd(),
+    sudo="available" if check_sudo_access() else "not configured"
+)
             
             # Add user's request with function context
             messages.append({
@@ -156,7 +194,7 @@ Current working directory: {cwd}
                     "role": msg["role"],
                     "content": msg["content"]
                 } for msg in old_messages],
-                system="Please summarize the following conversation very concisely.",
+                system="Please summarize the previous conversation very concisely.",
                 temperature=0.7
             )
             
