@@ -34,20 +34,21 @@ Your capabilities include:
 
 IMPORTANT: When processing user input:
 1. For greetings or general questions: Respond naturally and ask how you can help
-2. For task requests: Execute them using the available functions
+2. For task requests: Execute them directly using the provided functions
 3. For coding tasks: Provide guidance and execute necessary commands
 4. Format all responses in markdown
 5. Be concise unless details are requested
+6. NEVER simulate or make up command outputs - always use the actual output from execute_command()
 
 Example interactions:
 User: "hello"
 You: "Hello! How can I help you with your coding tasks today?"
 
 User: "list files in current directory"
-You: Execute command and show results:
+You: Let me list the files for you:
 ```
 $ ls -la
-[command output]
+[actual command output will be shown here]
 ```
 
 Please format your responses in markdown and be concise unless asked for details.
@@ -72,6 +73,7 @@ Please format your responses in markdown and be concise unless asked for details
                     return self.execute_command(command)
                 return f"Operation cancelled - no access to directory: {cwd}", 1
             
+            # Execute command and capture output
             result = subprocess.run(
                 command,
                 shell=True,
@@ -79,7 +81,11 @@ Please format your responses in markdown and be concise unless asked for details
                 text=True,
                 cwd=cwd
             )
-            return result.stdout + result.stderr, result.returncode
+            
+            # Return combined output and status
+            output = result.stdout + result.stderr
+            return output, result.returncode
+            
         except Exception as e:
             return str(e), 1
     
@@ -132,12 +138,18 @@ Please format your responses in markdown and be concise unless asked for details
             # Add available functions to the request
             function_context = """
 Available functions:
-- execute_command(command: str) -> Tuple[str, int]: Execute a shell command
+- execute_command(command: str) -> Tuple[str, int]: Execute a shell command and return its actual output
 - read_file(path: str) -> str: Read contents of a file
 - write_file(path: str, content: str) -> str: Write content to a file
 
 Current working directory: {cwd}
 Sudo access: {sudo}
+
+IMPORTANT: When executing commands:
+1. Use execute_command() to run the command and get its actual output
+2. NEVER simulate or make up command outputs
+3. Always show the actual command being run
+4. Format command output in a code block with the command at the top
 """.format(
     cwd=os.getcwd(),
     sudo="available" if check_sudo_access() else "not configured"
@@ -158,6 +170,21 @@ Sudo access: {sudo}
                 temperature=0.7
             )
             
+            # Get the response text
+            response_text = response.content[0].text
+            
+            # Check if the response contains a command to execute
+            if "execute_command(" in response_text:
+                # Extract the command from the response
+                start = response_text.find('execute_command("') + len('execute_command("')
+                end = response_text.find('")', start)
+                if start > -1 and end > -1:
+                    command = response_text[start:end]
+                    # Execute the command and get actual output
+                    output, status = self.execute_command(command)
+                    # Format the response with actual command output
+                    response_text = f"```\n$ {command}\n{output}\n```"
+            
             # Store in conversation history
             self.conversation_history.append({
                 "role": "user",
@@ -165,10 +192,10 @@ Sudo access: {sudo}
             })
             self.conversation_history.append({
                 "role": "assistant",
-                "content": response.content[0].text
+                "content": response_text
             })
             
-            return response.content[0].text
+            return response_text
             
         except Exception as e:
             console.print(f"[red]Error:[/red] {str(e)}")
