@@ -3,13 +3,14 @@
 import os
 import sys
 import json
+import subprocess
 from pathlib import Path
 from typing import Optional, List
 
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.prompt import Prompt
+from rich.prompt import Prompt, Confirm
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import FileHistory
@@ -34,6 +35,49 @@ def get_history_file() -> Path:
     config_dir = Path.home() / ".config" / "pocketcode"
     config_dir.mkdir(parents=True, exist_ok=True)
     return config_dir / "history"
+
+def check_directory_access(path: str) -> bool:
+    """Check if we have access to a directory."""
+    try:
+        Path(path).resolve().stat()
+        return True
+    except PermissionError:
+        return False
+
+def request_directory_access(path: str) -> bool:
+    """Request user permission to access a directory."""
+    console.print(f"\n[yellow]⚠️  Permission required[/yellow]")
+    console.print(f"PocketCode needs access to: {path}")
+    return Confirm.ask("Would you like to grant access?")
+
+def check_sudo_access() -> bool:
+    """Check if we have sudo access."""
+    try:
+        result = subprocess.run(
+            ["sudo", "-n", "true"],
+            capture_output=True,
+            text=True
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+def request_sudo_access() -> bool:
+    """Request user permission to configure sudo access."""
+    console.print("\n[yellow]⚠️  Superuser access required[/yellow]")
+    console.print("Some operations require superuser privileges.")
+    if Confirm.ask("Would you like to configure sudo access for PocketCode?"):
+        try:
+            # Show visudo command that needs to be run
+            console.print("\nPlease run this command to configure sudo access:")
+            console.print("[blue]sudo visudo -f /etc/sudoers.d/pocketcode[/blue]")
+            console.print("\nAnd add this line:")
+            console.print("[green]%admin ALL=(ALL) NOPASSWD: /usr/local/bin/pcode[/green]")
+            return True
+        except Exception as e:
+            console.print(f"[red]Error configuring sudo access:[/red] {str(e)}")
+            return False
+    return False
 
 class Interface:
     """CLI interface for interacting with the AI agent."""
@@ -67,6 +111,28 @@ class Interface:
         # Initialize agent
         self.agent = Agent(api_key)
         console.print("[green]✓[/green] API key saved successfully!")
+        
+        # Show welcome message after successful login
+        self.show_welcome_message()
+        
+    def show_welcome_message(self):
+        """Show welcome message after login."""
+        welcome_text = """
+# 🚀 Welcome to Pocket Code!
+
+I'm Claude, your AI coding assistant. I can help you with:
+- Writing and modifying code
+- Executing shell commands
+- Managing files and directories
+- Debugging and troubleshooting
+- And much more!
+
+Type `/help` to see available commands
+Or just tell me what you need help with!
+
+[dim]Note: Some operations may require directory or sudo access. I'll ask for permission when needed.[/dim]
+"""
+        console.print(Markdown(welcome_text))
         
     def load_api_key(self) -> Optional[str]:
         """Load saved API key."""
@@ -121,6 +187,8 @@ For any other input without a leading /, I will:
 1. Respond to greetings and questions
 2. Execute tasks and commands you request
 3. Help with coding and development tasks
+
+[dim]Note: Some operations may require directory or sudo access. I'll ask for permission when needed.[/dim]
 """
         console.print(Markdown(help_text))
         
@@ -135,6 +203,7 @@ For any other input without a leading /, I will:
 - API Key: {masked_key}
 - Model: Claude 3.7 Sonnet
 - Working Directory: {os.getcwd()}
+- Sudo Access: {"[green]✓[/green] Configured" if check_sudo_access() else "[yellow]![/yellow] Not configured"}
 """
         console.print(Markdown(config_text))
         
@@ -147,6 +216,7 @@ For any other input without a leading /, I will:
 - API Key: {"[green]✓[/green] Configured" if api_key else "[red]✗[/red] Not configured"}
 - Python Version: [green]✓[/green] {sys.version.split()[0]}
 - Working Directory: [green]✓[/green] {os.getcwd()}
+- Sudo Access: {"[green]✓[/green] Configured" if check_sudo_access() else "[yellow]![/yellow] Not configured"}
 """
         console.print(Markdown(health_text))
         
@@ -162,18 +232,17 @@ For any other input without a leading /, I will:
         
     def run(self):
         """Run the CLI interface."""
-        console.print("[bold]Welcome to PocketCode CLI![/bold]")
-        console.print("Type / and press Tab to see available commands")
-        console.print("Or just type your request and I'll help you")
+        console.print("[bold]Welcome to Pocket Code![/bold]")
+        console.print("Type /help to see available commands")
+        console.print("Or configure your API key with /login to get started")
         
         # Try to load saved API key
         api_key = self.load_api_key()
         if api_key:
             self.agent = Agent(api_key)
             console.print("[green]✓[/green] Loaded saved API key")
-        else:
-            console.print("Please configure your API key with /login")
-            
+            self.show_welcome_message()
+        
         while True:
             try:
                 # Get user input
